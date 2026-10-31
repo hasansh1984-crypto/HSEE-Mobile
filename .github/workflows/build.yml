@@ -7,9 +7,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -34,10 +38,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: ''
 
-      - name: Install Android SDK packages and accept licenses
+      - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses
           sdkmanager --install \
@@ -51,7 +53,7 @@ jobs:
 
           test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
 
-      - name: Set up Python 3.10
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -59,7 +61,58 @@ jobs:
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install buildozer==1.5.0 Cython==0.29.36
+          python -m pip install \
+            buildozer==1.5.0 \
+            Cython==0.29.36
+
+      - name: Create corrected Buildozer configuration
+        run: |
+          cat > buildozer.spec <<'EOF'
+          [app]
+
+          title = HSEE Mobile
+          package.name = hseemobile
+          package.domain = org.lorestan
+          source.dir = .
+          source.include_exts = py,kv,png,jpg,jpeg,atlas
+          version = 0.1
+          requirements = python3==3.12.9,hostpython3==3.12.9,kivy
+          orientation = portrait
+          fullscreen = 0
+
+          android.permissions = INTERNET
+          android.api = 35
+          android.minapi = 26
+          android.ndk_api = 26
+          android.archs = arm64-v8a
+          android.ndk = 28c
+
+          p4a.branch = develop
+
+          [buildozer]
+
+          log_level = 2
+          warn_on_root = 1
+          EOF
+
+      - name: Verify configuration
+        run: |
+          python - <<'PY'
+          import configparser
+
+          c = configparser.ConfigParser()
+          assert c.read("buildozer.spec"), "spec file missing"
+
+          assert c.get("app", "android.minapi") == "26"
+          assert c.get("app", "android.ndk_api") == "26"
+          assert c.get("app", "android.archs") == "arm64-v8a"
+          assert c.get("app", "p4a.branch") == "develop"
+          assert c.get("app", "android.api") == "35"
+
+          print("BUILD CONFIGURATION: OK")
+          PY
+
+          python -m py_compile main.py
 
       - name: Connect Buildozer to Android SDK
         run: |
@@ -69,28 +122,32 @@ jobs:
             -type f -name sdkmanager | head -n 1)
 
           test -n "$SDKMANAGER"
-          ln -sf "$SDKMANAGER" "$ANDROID_HOME/tools/bin/sdkmanager"
+
+          ln -sf "$SDKMANAGER" \
+            "$ANDROID_HOME/tools/bin/sdkmanager"
 
           mkdir -p "$HOME/.buildozer/android/platform"
+
           rm -rf "$HOME/.buildozer/android/platform/android-sdk"
 
           ln -s "$ANDROID_HOME" \
             "$HOME/.buildozer/android/platform/android-sdk"
 
-          echo "SDKMANAGER=$SDKMANAGER"
-          ls -l "$ANDROID_HOME/tools/bin/sdkmanager"
-          ls -l "$HOME/.buildozer/android/platform/android-sdk"
-
-      - name: Verify build environment
+      - name: Verify Android tools
         run: |
           python --version
           java -version
-          sdkmanager --list_installed
           test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
+          sdkmanager --list_installed
 
       - name: Build APK
         run: |
           buildozer android debug
+
+      - name: Verify APK
+        run: |
+          test -n "$(find bin -maxdepth 1 -name '*.apk' -print -quit)"
+          ls -lh bin/*.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
