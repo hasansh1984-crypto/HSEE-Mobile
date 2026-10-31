@@ -32,11 +32,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify Java version
-        run: |
-          java -version
-          echo "JAVA_HOME=$JAVA_HOME"
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -48,13 +43,13 @@ jobs:
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "build-tools;37.0.0"
+            "build-tools;35.0.0"
           yes | sdkmanager --licenses
+
           echo "ANDROIDSDK=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
           test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
-          test -x "$ANDROID_HOME/build-tools/37.0.0/aidl"
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -66,21 +61,32 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install buildozer==1.5.0 Cython==0.29.36
 
-      - name: Connect Buildozer to the installed Android SDK
+      - name: Connect Buildozer to Android SDK
         run: |
+          mkdir -p "$ANDROID_HOME/tools/bin"
+
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
+            -type f -name sdkmanager | head -n 1)
+
+          test -n "$SDKMANAGER"
+          ln -sf "$SDKMANAGER" "$ANDROID_HOME/tools/bin/sdkmanager"
+
           mkdir -p "$HOME/.buildozer/android/platform"
           rm -rf "$HOME/.buildozer/android/platform/android-sdk"
-          ln -s "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
-          echo "ANDROIDSDK=$ANDROID_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -l "$HOME/.buildozer/android/platform/android-sdk"
-          ls "$HOME/.buildozer/android/platform/android-sdk/build-tools/37.0.0/aidl"
 
-      - name: Show build environment
+          ln -s "$ANDROID_HOME" \
+            "$HOME/.buildozer/android/platform/android-sdk"
+
+          echo "SDKMANAGER=$SDKMANAGER"
+          ls -l "$ANDROID_HOME/tools/bin/sdkmanager"
+          ls -l "$HOME/.buildozer/android/platform/android-sdk"
+
+      - name: Verify build environment
         run: |
           python --version
           java -version
           sdkmanager --list_installed
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aidl"
 
       - name: Build APK
         run: |
