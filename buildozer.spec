@@ -6,7 +6,7 @@ package.domain = org.lorestan
 source.dir = .
 source.include_exts = py,kv,png,jpg,jpeg,atlas
 version = 0.1
-requirements = python3,kivy
+requirements = python3==3.12.9,hostpython3==3.12.9,kivy
 orientation = portrait
 fullscreen = 0
 
